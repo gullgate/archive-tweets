@@ -2,6 +2,8 @@
 
 import os
 import pytz
+import re
+import subprocess
 import sys
 import tweepy
 
@@ -15,7 +17,8 @@ maxtweets = 1000
 urlprefix = 'http://twitter.com/%s/status/'
 tweetfile = tweetdir + me + '.txt'
 idfile = tweetdir + me + '-lid.txt'
-datefmt = '%B %-d, %Y at %-I:%M %p (%s)'
+datefmt = '%a, %d %b %Y %H:%M:%S %z'
+mboxts = '%a %b %d %T %Y'
 
 def setup_api():
   """Authorize the use of the Twitter API."""
@@ -28,14 +31,30 @@ def setup_api():
   auth.set_access_token(a['token'], a['tokenSecret'])
   return tweepy.API(auth)
 
+TCO_RE = re.compile(r'(https?://t.co/\S+)')
+def expand_urls(text):
+  def replace_url(m):
+    url = m.group(1)
+    try:
+      lines = ('\n'.join(subprocess.Popen(['curl', '-sLI', url],
+                                          stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE
+                                         ).communicate())).split('\n')
+      loc = [l for l in lines if l.startswith('Location: ')][-1]
+      return loc.split(': ', 1)[1].strip()
+    except (subprocess.CalledProcessError, IndexError):
+      return url
+  return TCO_RE.sub(replace_url, text)
+
+
 # Authorize.
 api = setup_api()
 
 # Get the ID of the last downloaded tweet.
-lastID = '204960244940537858'
+lastID = int('204960244940537858')
 try:
   with open(idfile, 'r') as f:
-    lastID = f.read().rstrip()
+    lastID = int(f.read().strip())
 except IOError:
   pass
 
@@ -60,24 +79,26 @@ maxID = lastID
 utc = pytz.utc
 with open(tweetfile, 'a') as f:
   for t in tweets:
-    if t.id_str > lastID and t.id_str != maxID:
+    if int(t.id_str) > lastID and int(t.id_str) != maxID:
       ts = utc.localize(t.created_at).astimezone(homeTZ)
       try:
         frm = t.from_user
       except AttributeError:
         frm = me
-      # TODO: Clean up t.co URLs by using this trick:
-      #       curl -sLI http://t.co/Hy13FmLM |grep Location:
-      lines = ['From: @%s' % frm,
-               'Text: %s' % t.text,
-               'Date: %s' % ts.strftime(datefmt).decode('utf8'),
+      lines = ['From %s@twitter  %s' % (frm, ts.strftime(mboxts).decode('utf8')),
+               'Content-Type: text/plain; charset=utf-8',
+               'MIME-Version: 1.0',
                'Link: %s%s' % (urlprefix % frm, t.id_str),
+               'Date: %s' % ts.strftime(datefmt).decode('utf8'),
+               'From: @%s' % frm,
+               'Subject: %s' % t.text,
+               '', expand_urls(t.text),
                '', '']
       f.write('\n'.join(lines).encode('utf8'))
-      if t.id_str > maxID:
-        maxID = t.id_str
+      if int(t.id_str) > maxID:
+        maxID = int(t.id_str)
 lastID = maxID
 
 # Update the ID of the last downloaded tweet.
 with open(idfile, 'w') as f:
-  lastID = f.write(lastID)
+  lastID = f.write('%s' % lastID)
