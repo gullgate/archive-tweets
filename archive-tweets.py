@@ -14,7 +14,7 @@ homeTZ = pytz.timezone('GMT+0')
 
 # Parameters.
 maxtweets = 1000
-urlprefix = 'http://twitter.com/%s/status/'
+urlprefix = 'https://twitter.com/%s/status/'
 tweetfile = tweetdir + me + '.txt'
 idfile = tweetdir + me + '-lid.txt'
 datefmt = '%a, %d %b %Y %H:%M:%S %z'
