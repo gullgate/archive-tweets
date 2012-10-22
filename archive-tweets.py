@@ -31,7 +31,7 @@ def setup_api():
   auth.set_access_token(a['token'], a['tokenSecret'])
   return tweepy.API(auth)
 
-TCO_RE = re.compile(r'(https?://t.co/\S+)')
+TCO_RE = re.compile(r'(https?://t.co/[A-Za-z0-9_]+)')
 def expand_urls(text):
   def replace_url(m):
     url = m.group(1)
